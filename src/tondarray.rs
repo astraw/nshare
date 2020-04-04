@@ -205,3 +205,42 @@ mod nalgebra_impl {
         }
     }
 }
+
+mod no_unsafe_experiment {
+    use super::*;
+    use nalgebra::{
+        dimension::U1, storage::ContiguousStorageMut, Dim, Matrix, Scalar, SliceStorageMut,
+    };
+    use ndarray::{ArrayViewMut1, ShapeBuilder};
+
+    // Compare this with `ToNdarray1::to_ndarray1` above. For now this is a
+    // plain function, but once it works, we could try to make it a trait method again.
+    fn to_ndarray1<'a, N: Scalar, R: Dim, RStride: Dim, CStride: Dim>(
+        self_: &'a mut Matrix<N, R, U1, SliceStorageMut<'a, N, R, U1, RStride, CStride>>,
+    ) -> ArrayViewMut1<'a, N>
+    where
+        SliceStorageMut<'a, N, R, U1, RStride, CStride>: ContiguousStorageMut<N, R>,
+    {
+        ArrayViewMut1::from_shape(
+            (self_.shape().0,).strides((self_.strides().0,)),
+            self_.as_mut_slice(),
+        )
+        .expect("failed converting")
+    }
+
+    #[test]
+    fn test_to_ndarray() {
+        use nalgebra::{Vector4, dimension::U2};
+        let mut m = Vector4::new(
+            0.1, 0.2, 0.3, 0.4,
+        );
+        {
+            let mut_view = &mut m.rows_generic_with_step_mut::<U2>(0, U2, 1);
+            let arr = to_ndarray1(mut_view);
+            for n in arr {
+                *n = 0.0;
+            }
+        }
+        assert!(m.iter().eq(&[0.0, 0.2, 0.0, 0.4]));
+    }
+}
